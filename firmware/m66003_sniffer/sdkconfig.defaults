@@ -1,0 +1,9 @@
+# Console stays at the default 115200 baud: the display bus produces only a
+# few short frames per second.
+# Full CPU speed for the polling loop on core 1
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+# The sniffer task on core 1 never yields, so don't watch core 1's idle task
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=n
+# Quiet boot so the capture log stays clean
+CONFIG_LOG_DEFAULT_LEVEL_WARN=y
+CONFIG_BOOTLOADER_LOG_LEVEL_WARN=y

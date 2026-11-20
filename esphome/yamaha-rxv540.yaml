@@ -1,0 +1,263 @@
+# Smart Receiver - Yamaha RX-V540RDS (Phase 3)
+#
+# Wiring (see "Phase 1 - probe plan" / DB-9 table):
+#   GPIO5  <- CEFD (CS)   via 1k/2.2k divider
+#   GPIO18 <- CKFD (SCK)  via 1k/2.2k divider
+#   GPIO23 <- DTFD (DATA) via 1k/2.2k divider
+#   GPIO25 -> 4.7k -> BC547 base (100k B-E), collector on REM1, emitter MG
+#             GPIO high = REM1 low = IR "mark". Never put a divider on REM1.
+#   GND    -- MG
+#
+# Assumptions:
+#  - ESPHome Builder (HA add-on); this file in /config/esphome/, the component in
+#    /config/esphome/components/yamaha_vfd/.
+#  - No other component in this config uses GPIO interrupts (binary_sensor on a
+#    GPIO with interrupts, pulse_counter etc.): yamaha_vfd owns the GPIO interrupt.
+#  - Volume range observed on the display: Mute, -99 ... 0 dB, 1 dB per IR press.
+#  - Template switches use restore_mode: DISABLED: a boot must never send commands.
+
+substitutions:
+  name: yamaha-rxv540
+  friendly_name: Yamaha RX-V540
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  build_path: C:/esphome-build/yamaha-rxv540
+
+esp32:
+  board: esp32dev
+  # The capture ISR polls GPIO at CPU speed; 240 MHz gives the most margin.
+  # If your ESPHome version rejects this key, delete it (160 MHz also works,
+  # the code reads the actual clock at boot).
+  cpu_frequency: 240MHz
+  framework:
+    type: esp-idf
+
+logger:
+  level: DEBUG
+
+api:
+  encryption:
+    key: !secret yamaha_api_key
+
+ota:
+  - platform: esphome
+    password: !secret yamaha_ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "${name} fallback"
+    password: !secret yamaha_ap_password
+
+captive_portal:
+
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [yamaha_vfd]
+
+remote_transmitter:
+  id: ir_tx
+  pin: GPIO25
+  carrier_duty_percent: 100%   # demodulated NEC straight onto REM1, no 38 kHz
+  non_blocking: true
+
+yamaha_vfd:
+  id: rxv
+  cs_pin: 5
+  sck_pin: 18
+  data_pin: 23
+  transmitter_id: ir_tx
+  # Push model: the entities below poll only every 60 s as a fallback; the
+  # component triggers an update the moment the display/state changes.
+  on_change:
+    - component.update: rxv_volume
+    - component.update: rxv_input
+    - component.update: rxv_sound_program
+    - component.update: rxv_sub_program
+    - component.update: rxv_input_mode
+    - component.update: rxv_tuner
+    - component.update: rxv_display
+
+switch:
+  - platform: template
+    name: Power
+    id: rxv_power
+    restore_mode: DISABLED
+    icon: mdi:power
+    lambda: |-
+      if (!id(rxv).power_known()) return {};
+      return id(rxv).is_on();
+    turn_on_action:
+      - lambda: id(rxv).set_power(true);
+    turn_off_action:
+      - lambda: id(rxv).set_power(false);
+
+  - platform: template
+    name: Mute
+    id: rxv_mute
+    restore_mode: DISABLED
+    icon: mdi:volume-off
+    lambda: |-
+      if (!id(rxv).mute_known()) return {};
+      return id(rxv).is_muted();
+    turn_on_action:
+      - lambda: id(rxv).set_mute(true);
+    turn_off_action:
+      - lambda: id(rxv).set_mute(false);
+
+  - platform: template
+    name: Bus trace
+    icon: mdi:bug
+    entity_category: diagnostic
+    restore_mode: DISABLED
+    optimistic: true
+    turn_on_action:
+      - lambda: id(rxv).set_trace(true);
+    turn_off_action:
+      - lambda: id(rxv).set_trace(false);
+
+number:
+  - platform: template
+    name: Volume
+    id: rxv_volume
+    icon: mdi:volume-high
+    unit_of_measurement: dB
+    mode: slider
+    min_value: -99
+    max_value: 0
+    step: 1
+    update_interval: 60s
+    lambda: |-
+      if (!id(rxv).has_volume()) return {};
+      return id(rxv).volume_db();
+    set_action:
+      - lambda: id(rxv).set_volume_db(x);
+
+select:
+  - platform: template
+    name: Input
+    id: rxv_input
+    icon: mdi:import
+    options:
+      - CD
+      - TUNER
+      - MD/CD-R
+      - DVD
+      - D-TV/CBL
+      - V-AUX
+      - VCR
+    update_interval: 60s
+    lambda: |-
+      const std::string in = id(rxv).input();
+      if (in.empty() || in == "PHONO") return {};
+      return in;
+    set_action:
+      - lambda: id(rxv).select_input(x);
+
+text_sensor:
+  # Sound program = UPPERCASE program (e.g. MOVIE THTR 1); Sub-program = the
+  # name shown on the display (e.g. Spectacle). Grouping is inferred.
+  - platform: template
+    name: Sound program
+    id: rxv_sound_program
+    icon: mdi:surround-sound
+    update_interval: 60s
+    lambda: |-
+      const std::string g = id(rxv).program_group();
+      if (g.empty()) return {};
+      return g;
+  - platform: template
+    name: Sub-program
+    id: rxv_sub_program
+    icon: mdi:surround-sound
+    update_interval: 60s
+    lambda: |-
+      const std::string p = id(rxv).program();
+      if (p.empty()) return {};
+      return p;
+  # Input mode = the field right of the input name on the input screen (AUTO / blank).
+  - platform: template
+    name: Input mode
+    id: rxv_input_mode
+    icon: mdi:waveform
+    update_interval: 60s
+    lambda: |-
+      const std::string d = id(rxv).decoder();
+      if (d.empty()) return {};
+      return d;
+  - platform: template
+    name: Tuner
+    id: rxv_tuner
+    icon: mdi:radio
+    update_interval: 60s
+    lambda: |-
+      const std::string t = id(rxv).tuner();
+      if (t.empty()) return {};
+      return t;
+  - platform: template
+    name: Display
+    id: rxv_display
+    icon: mdi:form-textbox
+    update_interval: 60s
+    lambda: |-
+      return id(rxv).display_text();
+
+binary_sensor:
+  - platform: template
+    name: Command busy
+    entity_category: diagnostic
+    lambda: return id(rxv).busy();
+
+sensor:
+  - platform: template
+    name: Bus frames OK
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    state_class: total_increasing
+    update_interval: 300s
+    lambda: return (float) id(rxv).frames_ok();
+  - platform: template
+    name: Bus frames bad
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    state_class: total_increasing
+    update_interval: 300s
+    lambda: return (float) id(rxv).frames_bad();
+  - platform: template
+    name: Bus frames dropped
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    state_class: total_increasing
+    update_interval: 300s
+    lambda: return (float) id(rxv).frames_dropped();
+  - platform: wifi_signal
+    name: WiFi signal
+    update_interval: 60s
+  - platform: uptime
+    name: Uptime
+    update_interval: 60s
+
+button:
+  - platform: template
+    name: Re-sync state
+    icon: mdi:sync
+    entity_category: config
+    on_press:
+      - lambda: id(rxv).probe();
+  - platform: template
+    name: Volume up (raw)
+    icon: mdi:volume-plus
+    on_press:
+      - lambda: id(rxv).send_command(0x1A);
+  - platform: template
+    name: Volume down (raw)
+    icon: mdi:volume-minus
+    on_press:
+      - lambda: id(rxv).send_command(0x1B);
+  - platform: restart
+    name: Restart

@@ -1,0 +1,74 @@
+# Smart Receiver - Phase 4: one media_player for the Yamaha RX-V540RDS
+#
+# Home Assistant package. Put this file in /config/packages/ and make sure
+# configuration.yaml contains:
+#
+#   homeassistant:
+#     packages: !include_dir_named packages
+#
+# Wraps the ESPHome entities of the yamaha-rxv540 device in a Universal media
+# player. Entity IDs are the ones HA created for the device (some got the
+# "living_room_" area prefix); adjust them here if you rename entities.
+#
+# Volume mapping: HA volume_level 0.0 ... 1.0  <->  receiver -99 ... 0 dB, linear.
+# The ESPHome Volume number is capped at 0 dB, so 1.0 can never exceed 0 dB.
+
+template:
+  - sensor:
+      - name: Yamaha RX-V540 volume level
+        unique_id: yamaha_rxv540_volume_level
+        state: >-
+          {% set db = states('number.yamaha_rx_v540_volume') %}
+          {% if is_number(db) %}{{ ((db | float + 99) / 99) | round(3) }}{% else %}{{ none }}{% endif %}
+
+media_player:
+  - platform: universal
+    name: Yamaha RX-V540
+    unique_id: yamaha_rxv540_media_player
+    device_class: receiver
+    state_template: >-
+      {{ 'on' if is_state('switch.yamaha_rx_v540_power', 'on') else 'off' }}
+    commands:
+      turn_on:
+        action: switch.turn_on
+        target:
+          entity_id: switch.yamaha_rx_v540_power
+      turn_off:
+        action: switch.turn_off
+        target:
+          entity_id: switch.yamaha_rx_v540_power
+      volume_set:
+        action: number.set_value
+        target:
+          entity_id: number.yamaha_rx_v540_volume
+        data:
+          value: "{{ (volume_level * 99 - 99) | round(0) }}"
+      # +/- 1 dB through the closed-loop volume control on the ESP
+      volume_up:
+        action: number.set_value
+        target:
+          entity_id: number.yamaha_rx_v540_volume
+        data:
+          value: "{{ [states('number.yamaha_rx_v540_volume') | float(-99) + 1, 0] | min }}"
+      volume_down:
+        action: number.set_value
+        target:
+          entity_id: number.yamaha_rx_v540_volume
+        data:
+          value: "{{ [states('number.yamaha_rx_v540_volume') | float(-99) - 1, -99] | max }}"
+      volume_mute:
+        action: "switch.turn_{{ 'on' if is_volume_muted else 'off' }}"
+        target:
+          entity_id: switch.yamaha_rx_v540_mute
+      select_source:
+        action: select.select_option
+        target:
+          entity_id: select.yamaha_rx_v540_input
+        data:
+          option: "{{ source }}"
+    attributes:
+      is_volume_muted: switch.yamaha_rx_v540_mute
+      volume_level: sensor.yamaha_rx_v540_volume_level
+      source: select.yamaha_rx_v540_input
+      source_list: select.yamaha_rx_v540_input|options
+      sound_mode: sensor.living_room_yamaha_rx_v540_sub_program

@@ -1,0 +1,20 @@
+# --- secrets: never commit ---
+esphome/secrets.yaml
+
+# --- ESPHome tooling / build output (regenerated) ---
+esphome/.venv/
+esphome/.esphome/
+esphome/.idf/
+**/__pycache__/
+
+# --- ESP-IDF sniffer build output ---
+firmware/**/build/
+firmware/**/sdkconfig
+firmware/**/sdkconfig.old
+firmware/**/managed_components/
+
+# --- logs ---
+esphome/esp-log*.txt
+
+# --- Yamaha service manual: copyrighted, keep it out of the repo ---
+yamaha rx-v540 service manual.pdf
