@@ -116,3 +116,7 @@ The receiver has mains voltage inside. Only open it unplugged, with the filter c
 
 - [emsyscode/M66003](https://github.com/emsyscode/M66003) – Arduino driver for the M66003 VFD controller (command set reference)
 - Yamaha RX-V540 service manual – schematics, IR code tables, DIAG mode
+
+## License
+
+[MIT](LICENSE). This covers the code and documentation in this repository. It does not cover the Yamaha service manual or Yamaha trademarks.
