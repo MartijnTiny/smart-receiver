@@ -120,3 +120,5 @@ The receiver has mains voltage inside. Only open it unplugged, with the filter c
 ## License
 
 [MIT](LICENSE). This covers the code and documentation in this repository. It does not cover the Yamaha service manual or Yamaha trademarks.
+
+A compiled firmware image links ESPHome's C++ runtime, which is GPLv3. Anyone who distributes such a binary must also provide its source, which this repository does.

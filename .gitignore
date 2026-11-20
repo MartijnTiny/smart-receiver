@@ -18,3 +18,8 @@ esphome/esp-log*.txt
 
 # --- Yamaha service manual: copyrighted, keep it out of the repo ---
 yamaha rx-v540 service manual.pdf
+
+# --- screenshots from the service manual: copyrighted ---
+Function connector.PNG
+Operation connector.PNG
+Capture.PNG
